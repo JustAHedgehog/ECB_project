@@ -2,11 +2,11 @@ clc;clear;close all;
 
 %% 1. 載入數據
 % 讀取數據文件
-filename = 'simulation_data_full_iteration.xlsx';
+filename = 'data.xlsx'; % data.xlsx or simulation_data_full_iteration.xlsx
 opts = detectImportOptions(filename);
-% opts.Sheet = 'Sheet1';
+opts.Sheet = 'Sheet1';
 % opts.SelectedVariableNames = [1:5];
-opts.DataRange = '1:2601';
+opts.DataRange = '2:601'; % 一組參數的數據範圍為100行
 data_table = readtable(filename, opts);
 
 if isempty(data_table)
@@ -15,7 +15,7 @@ end
 
 %% 2. 選擇要繪製的參數組
 % 選定 ParamSetID 繪製數據
-selected_param_set_ids = 1:20; 
+selected_param_set_ids = 1:5; 
 
 % 獲取所有獨特的 ParamSetID
 all_unique_param_ids = unique(data_table.ParamSetID);
@@ -91,7 +91,7 @@ set(hx, 'Rotation', 10);
 
 % 設定 Y 軸標籤，並調整旋轉角度
 hy = ylabel('Angular Velocity (rpm)');
-set(hy, 'Rotation', -15); 
+set(hy, 'Rotation', -20); 
 
 % 設定 Z 軸標籤
 hz = zlabel('Torque (N-m)');
