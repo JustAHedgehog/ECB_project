@@ -1,11 +1,19 @@
 clc; clear; close all;
 
 %% 1. 定義設計目標
-target1 = [255.6, 1.833]; % 低速
-target2 = [573.0, 18.39]; % 高速
+target_A = [255.6, 1.833]; % P_low: [轉速, 扭矩]
+target_B = [573.0, 18.39]; % 點A: [轉速, 扭矩]
+
+% 新增：點C的相關比例
+Ratio = 0.2;              % 假設轉速下降 20%
+HysteresisRatio = 0.15;   % 假設扭矩下降 15%
+
+% 計算點C的座標
+omega_C = target_B(1) * (1 - Ratio);
+torque_C = target_B(2) * (1 - HysteresisRatio);
+target_C = [omega_C, torque_C];
 
 %% 2. 定義優化變數 (使用比例參數代替絕對尺寸)
-% 我們優化 13 個變數：
 % x(1): g1 (低速氣隙)
 % x(2): g2 (高速氣隙)
 % x(3): r_yo (背鐵外徑) -> 絕對值
@@ -60,7 +68,7 @@ for i = 1:length(possible_poles)
     objFunc = @(x) objectiveCost(x, lb, ub);
     
     % 限制函數 (包含動態幾何解碼)
-    nonlconFunc = @(x) parametricConstraints(x, target1, target2, current_p);
+    nonlconFunc = @(x) parametricConstraints(x, target_A, target_B, target_C, current_p);
     
     % 線性限制 g2 <= g1
     A = [-1, 1, zeros(1,11)]; b = 0;
@@ -95,8 +103,9 @@ params = best.params;
 
 %% 6. 結果顯示
 g1 = best.x(1); g2 = best.x(2);
-T1 = calculateTorque(params, target1(1), g1);
-T2 = calculateTorque(params, target2(1), g2);
+T_A = calculateTorque(params, target_A(1), g1);
+T_B = calculateTorque(params, target_B(1), g2);
+T_C = calculateTorque(params, target_C(1), g2);
 
 fprintf('\n=== 最佳化結果 (Parametric Logic) ===\n');
 fprintf('極對數 p = %d\n', best.p);
@@ -110,8 +119,9 @@ fprintf('  安裝半徑 (r_av): %.2f mm (位置比: %.0f%%)\n', params.r_av*1000
 fprintf('  磁石厚度 (t_m) : %.2f mm\n', params.t_m*1000);
 
 fprintf('\n【扭矩性能】\n');
-fprintf('  目標1: %.3f Nm -> 實際: %.3f Nm (Err: %.2f%%)\n', target1(2), T1, abs(T1-target1(2))/target1(2)*100);
-fprintf('  目標2: %.3f Nm -> 實際: %.3f Nm (Err: %.2f%%)\n', target2(2), T2, abs(T2-target2(2))/target2(2)*100);
+fprintf('  目標1: %.3f Nm -> 實際: %.3f Nm (Err: %.2f%%)\n', target_A(2), T_A, abs(T_A-target_A(2))/target_A(2)*100);
+fprintf('  目標2: %.3f Nm -> 實際: %.3f Nm (Err: %.2f%%)\n', target_B(2), T_B, abs(T_B-target_B(2))/target_B(2)*100);
+fprintf('  目標3: %.3f Nm -> 實際: %.3f Nm (Err: %.2f%%)\n', target_C(2), T_C, abs(T_C-target_C(2))/target_C(2)*100);
 
 %% 7. 將所有成功收斂的組別匯出至 Excel
 if ~exist('valid_results', 'var') || isempty(valid_results)
@@ -160,8 +170,9 @@ else
     col_H = zeros(n,1);
     
     % 扭矩驗證 (驗證優化結果是否真的達標)
-    col_Torque1 = zeros(n, 1);
-    col_Torque2 = zeros(n, 1);
+    col_TorqueA = zeros(n, 1);
+    col_TorqueB = zeros(n, 1);
+    col_TorqueC = zeros(n, 1);
     
     % 2. 迴圈提取數據
     for i = 1:n
@@ -200,8 +211,9 @@ else
         col_w_m(i) = p_struct.w_m * 1000;
         col_H(i) = p_struct.H;
         % 重新計算一次扭矩以記錄
-        col_Torque1(i) = T1;
-        col_Torque2(i) = T2;
+        col_TorqueA(i) = T_A;
+        col_TorqueB(i) = T_B;
+        col_TorqueC(i) = T_C;
     end
     
     % 3. 建立 Table
@@ -212,7 +224,7 @@ else
         col_r_co, col_r_ci, col_t_c, col_H_c, col_B_r, ...
         col_r_av, col_l_m, col_t_m, col_PM_ratio, col_mu_r, ...
         col_theta_p, col_tau_p, col_w_m, col_H, ...
-        col_Torque1, col_Torque2, ...
+        col_TorqueA, col_TorqueB, col_TorqueC, ...
         'VariableNames', {'p', 'Cost_fval', ...
                         'Gap_Low', 'Gap_High', ...
                         'mu_0', 'mu_y', 'mu_c', ...
@@ -220,9 +232,9 @@ else
                         'r_co', 'r_ci', 't_c', 'H_c', 'B_r', ...
                         'r_av', 'l_m', 't_m', 'PM_ratio', 'mu_r', ...
                         'theta_p', 'tau_p', 'w_m', 'H', ...
-                        'Torque_Low', 'Torque_High'});
+                        'Torque_A', 'Torque_B', 'Torque_C'});
     % 4. 寫入 Excel
-    filename = 'Optimization_Results_1.xlsx';
+    filename = 'Optimization_modified.xlsx';
     
     % 檢查檔案是否存在，若存在則刪除舊檔 (避免寫入衝突或混淆)
     if exist(filename, 'file')
@@ -240,7 +252,6 @@ end
 %% --- 核心函數：參數解碼 (Decoder) ---
 function params = xToParams(x, p)
     % 將 [0,1] 的比例係數轉為符合物理限制的絕對尺寸
-    
     params = struct();
     params.mu_0 = 4*pi*1e-7; params.mu_y = 4000; params.mu_c = 1.257e-6;
     
@@ -265,10 +276,8 @@ function params = xToParams(x, p)
     
     params.l_m = k_lm * max_lm; 
     
-    % 邏輯 B: r_av 必須讓磁石在背鐵內
     % 磁石的半徑範圍: [r_av - lm/2, r_av + lm/2]
     % 必須滿足: r_yi < (r_av - lm/2)  且  (r_av + lm/2) < r_yo
-    % 推導出 r_av 的可行範圍:
     min_rav = params.r_yi + params.l_m/2 + 0.001; % 內側留 1mm
     max_rav = params.r_yo - params.l_m/2 - 0.001; % 外側留 1mm
     
@@ -294,27 +303,34 @@ function cost = objectiveCost(x, ~, ub)
     cost = (r_yo/ub(3))^2 + (t_m/ub(13)) + (abs(g1-g2)/0.01)*0.5;
 end
 
-function [c, ceq] = parametricConstraints(x, target1, target2, p)
+function [c, ceq] = parametricConstraints(x, target1, target2, targetB, p)
     % 解碼參數
     params = xToParams(x, p);
-    g1 = x(1); g2 = x(2);
+    g1 = x(1); % 大氣隙 (對應 target1)
+    g2 = x(2); % 小氣隙 (對應 target2 與 targetB)
     
-    % 幾何限制
-    % 因為我們用了比例參數，大部分幾何干涉已經在 xToParams 被解決了
-    % 我們只需要確保 r_yi < r_yo 的基本空間存在
-    
-    % 限制: r_yo - r_yi >= 20mm (對應 Random code: min(60, r_yo... - 20))
+    % 幾何限制 (保持原樣)
     c1 = 0.020 - (params.r_yo - params.r_yi); 
-    
-    c = c1; % 不等式限制 (c <= 0)
-    
+    c = c1; 
+
     % 扭矩計算
     try
-        T1 = calculateTorque(params, target1(1), g1);
-        T2 = calculateTorque(params, target2(1), g2);
-        if isnan(T1) || isnan(T2), error('NaN'); end
-        ceq = [(T1-target1(2))/target1(2); (T2-target2(2))/target2(2)];
+        % 1. 計算低速點A (g1)
+        T_A = calculateTorque(params, target1(1), g1);
+        
+        % 2. 計算點B (g2)
+        T_B = calculateTorque(params, target2(1), g2);
+
+        % 3. 計算點C (g2)
+        T_C = calculateTorque(params, targetB(1), g2);
+
+        if any(isnan([T_A, T_B, T_C])), error('NaN'); end
+        
+        % 等式約束：誤差趨近於 0
+        ceq = [ (T_A - target1(2)) / target1(2); 
+                (T_B - target2(2)) / target2(2);
+                (T_C - targetB(2)) / targetB(2) ]; % 新增點 C 的約束
     catch
-        ceq = [1e5; 1e5];
+        ceq = [1e5; 1e5; 1e5];
     end
 end
