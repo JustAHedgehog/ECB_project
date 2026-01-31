@@ -1,4 +1,4 @@
-function [F_total, Fw, Fm] = requiredForce(mech_params, ECB, omega_rpm, g_curr, g_ini, direction)
+function [F_total, info] = requiredForce(mech_params, ECB, omega_rpm, g_curr, g_ini, direction)
     % mech_params: 由 xToMechParams 產生的結構體
     % ECB: 包含 C_s, C_e, g_e 的結構體
     
@@ -10,12 +10,9 @@ function [F_total, Fw, Fm] = requiredForce(mech_params, ECB, omega_rpm, g_curr, 
     omega_rad = omega_rpm .* pi / 30;
     
     % 機構幾何計算
-    % 多邊形心距 (Apothem)
     a_i = 0.5 .* L_r .* tan(pi .* (N - 2) / (2 .* N));
-    % 行程計算 (mm -> m)
-    disp_x = (g_ini - g_curr) / 1000;
-    % 旋轉半徑 r_omega
-    r_omega = a_i + r_r + disp_x .* tan(alpha_rad) + 0.1 .* mech_params.r_yi;
+    disp_x = (g_ini - g_curr) / 1000; % 行程計算
+    r_omega = a_i + r_r + disp_x .* cot(alpha_rad) + 0.1 .* mech_params.r_yi; % 旋轉半徑 r_omega
     
     % 推力計算 (F_wedge)
     m_r = pi .* r_r.^2 .* L_r .* mech_params.rho;
@@ -28,7 +25,12 @@ function [F_total, Fw, Fm] = requiredForce(mech_params, ECB, omega_rpm, g_curr, 
     Fw = N .* num / den;
     
     % 磁力計算 (F_magnet)
-    Fm = (ECB.C_s - ECB.C_e .* omega_rpm) / (g_curr + ECB.g_e).^2;
+    Fm = (ECB.C_s - ECB.C_e .* omega_rpm) ./ (g_curr*1000 + ECB.g_e).^2;
     
     F_total = Fw + Fm;
+
+    info.den = den;
+    info.Fw = Fw;
+    info.Fm = Fm;
+    info.r_omega = r_omega;
 end

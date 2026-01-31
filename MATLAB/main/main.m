@@ -2,6 +2,7 @@ clc; clear; close all;
 import optimizeECB.*
 import calculateTorque.*
 import optimizeMech.*
+import requiredForce.*
 import torqueCurveFitting.*
 import saveParams.*
 
@@ -25,7 +26,7 @@ target2 = [573.0, 18.39]; % 高速
 % x(13): t_m
 
 % 設定上下界 (LB, UB)
-%     g_ini  g_final r_yo   r_yi   t_y    sigma   t_c     H_c    B_r  k_lm   k_pos  PM    t_m
+%         g_ini  g_final r_yo   r_yi   t_y    sigma   t_c     H_c    B_r  k_lm   k_pos  PM    t_m
 ECB.lb = [0.004, 0.003, 0.040, 0.020, 0.001, 24.9e6, 0.0005, 844e3, 1.14, 0.10,  0.00,  0.4, 0.001];
 ECB.ub = [0.015, 0.012, 0.110, 0.060, 0.010, 59.5e6, 0.0050, 907e3, 1.33, 0.90,  1.00,  0.9, 0.009];
 
@@ -54,23 +55,19 @@ g_ini = best.x(1); g_final = best.x(2);
 T1 = calculateTorque(params, target1(1), g_ini);
 T2 = calculateTorque(params, target2(1), g_final);
 
-% fprintf('\n=== 最佳化結果 (Parametric Logic) ===\n');
-% fprintf('極對數 p = %d\n', best.p);
-% fprintf('--------------------------------------\n');
-% fprintf('【幾何參數 (絕對值)】\n');
-% fprintf('  背鐵外徑 (r_yo): %.2f mm\n', params.r_yo*1000);
-% fprintf('  背鐵內徑 (r_yi): %.2f mm\n', params.r_yi*1000);
-% fprintf('    -> 可用空間  : %.2f mm\n', (params.r_yo - params.r_yi)*1000);
-% fprintf('  磁石長度 (l_m) : %.2f mm (佔用比: %.0f%%)\n', params.l_m*1000, best.x(10)*100);
-% fprintf('  安裝半徑 (r_av): %.2f mm (位置比: %.0f%%)\n', params.r_av*1000, best.x(11)*100);
-% fprintf('  磁石厚度 (t_m) : %.2f mm\n', params.t_m*1000);
-% fprintf('\n【扭矩性能】\n');
-% fprintf('  目標1: %.3f Nm -> 實際: %.3f Nm (Err: %.2f%%)\n', target1(2), T1, abs(T1-target1(2))/target1(2)*100);
-% fprintf('  目標2: %.3f Nm -> 實際: %.3f Nm (Err: %.2f%%)\n', target2(2), T2, abs(T2-target2(2))/target2(2)*100);
-
-%% 將ECB所有成功收斂的組別匯出至 Excel
-% filename = 'Results_1.xlsx';
-% saveParams(valid_results, T1, T2, filename);
+fprintf('\n=== 最佳化結果 (Parametric Logic) ===\n');
+fprintf('極對數 p = %d\n', best.p);
+fprintf('--------------------------------------\n');
+fprintf('【幾何參數 (絕對值)】\n');
+fprintf('  背鐵外徑 (r_yo): %.2f mm\n', params.r_yo*1000);
+fprintf('  背鐵內徑 (r_yi): %.2f mm\n', params.r_yi*1000);
+fprintf('    -> 可用空間  : %.2f mm\n', (params.r_yo - params.r_yi)*1000);
+fprintf('  磁石長度 (l_m) : %.2f mm (佔用比: %.0f%%)\n', params.l_m*1000, best.x(10)*100);
+fprintf('  安裝半徑 (r_av): %.2f mm (位置比: %.0f%%)\n', params.r_av*1000, best.x(11)*100);
+fprintf('  磁石厚度 (t_m) : %.2f mm\n', params.t_m*1000);
+fprintf('\n【扭矩性能】\n');
+fprintf('  目標1: %.3f Nm -> 實際: %.3f Nm (Err: %.2f%%)\n', target1(2), T1, abs(T1-target1(2))/target1(2)*100);
+fprintf('  目標2: %.3f Nm -> 實際: %.3f Nm (Err: %.2f%%)\n', target2(2), T2, abs(T2-target2(2))/target2(2)*100);
 
 %% 機構參數最佳化
 % 電磁力常數 (單位需注意：mm, rpm)
@@ -85,8 +82,11 @@ mech.lb = [0.010, 0.020, 4,  30, 0.05, 0.05];
 mech.ub = [0.050, 0.080, 12, 60, 0.20, 0.20];
 mech.x0 = [0.030, 0.040, 8,  45, 0.10, 0.10];
 mech.r_yi = params.r_yi;
+mech.R_hy = 0.2;
+mech.omega_C = target2(1) - mech.R_hy * (target2(1) - target1(1)); % 設定遲滯點 C 轉速
+mech.T_C = calculateTorque(params, mech.omega_C, g_final);
 
-[mech_best, fval, best_params] = optimizeMech(mech, ECB, target1(1), target2(1), g_ini, g_final);
+[mech_best, mech_fval, best_params] = optimizeMech(mech, ECB, target1(1), target2(1), g_ini, g_final);
 fprintf('\n=== 機械參數優化結果 ===\n');
 fprintf('滾子半徑 (r_r): %.2f mm\n', mech_best(1)*1000);
 fprintf('滾子長度 (L_r): %.2f mm\n', mech_best(2)*1000);
@@ -94,7 +94,7 @@ fprintf('滾子數量 (N): %d\n', mech_best(3));
 fprintf('楔形角度 (alpha): %.2f deg\n', mech_best(4));
 fprintf('楔形摩擦 (mu_w): %.3f\n', mech_best(5));
 fprintf('盤面摩擦 (mu_t): %.3f\n', mech_best(6));
-fprintf('最小遲滯目標值: %.4f\n', fval);
+fprintf('最小遲滯目標值: %.4f\n', mech_fval);
 
 % 建立目標二次曲線函數 (假設通過 0, A, B 三點)
 % T = a*w^2 + b*w
@@ -104,41 +104,55 @@ coeffs = pts \ vals; % 求解 [a; b]
 a_target = coeffs(1); b_target = coeffs(2);
 
 % 目標函數：給轉速 w，回傳目標扭矩 T
-T_target_func = @(w) a_target * w.^2 + b_target * w;
-[g_current_vec, w_range, T_actual] = torqueCurveFitting(T_target_func, target1, target2, best);
+T_up_func = @(w) a_target * w.^2 + b_target * w;
+[g_up_vec, w_up, T_up_actual] = torqueCurveFitting(T_up_func, target1, target2, best);
+
+mech.T_D = target1(2) * (1 + mech.R_hy);
+mech.omega_E = target1(1) * 0.9;
+mech.T_E = calculateTorque(params, mech.omega_E, g_ini);
+
+[w_down, g_down_vec, T_down] = DownCurve(params, target1, target2, g_ini, g_final, mech);
 
 % 計算彈力的上下限
-[F_up, Fw_up, Fm_up] = requiredForce(best_params, ECB, w_range, g_current_vec, g_ini, 'up');
-[F_down, Fw_down, Fm_down] = requiredForce(best_params, ECB, w_range, g_current_vec, g_ini, 'down');
+F_up = requiredForce(best_params, ECB, w_up, g_up_vec, g_ini, 'up');
+[F_down, info] = requiredForce(best_params, ECB, w_down, g_down_vec, g_ini, 'down');
 
 
 %% --- 驗證與繪圖 ---
-figure;
-subplot(2,1,1);
-yyaxis left
-plot(w_range, g_current_vec * 1000, '-o', 'DisplayName', 'g fit');
-ylabel('Air Gap (mm)');
-yyaxis right
-plot(w_range, T_target_func(w_range), 'k--', 'LineWidth', 2, 'DisplayName', 'Target (Quadratic)'); hold on;
-plot(w_range, T_actual, 'ro', 'DisplayName', 'Actual (fitting)');
+figure("Name", 'Torque');
+plot(w_up, T_up_func(w_up), 'bo-', 'LineWidth', 2, 'DisplayName', 'ACC'); hold on;
+plot(w_down, T_down, 'ro-', 'DisplayName', 'DEC');
+xline(mech.omega_C, '--', 'DisplayName', 'Hysteresis C');
+xline(target1(1), 'm--', 'DisplayName', 'Residual D');
 ylabel('Torque (N-m)'); 
-ax = gca; % 获取当前坐标轴对象
-ax.YColor = 'k'; % 设置 Y 轴颜色
 xlabel('Speed (rpm)');
-legend('Location', 'north');
+legend('Location', 'northwest');
 grid on;
-title('Torque Validification & Air Gap Variation');
+title('Torque Curve');
 
 % 機構推力與氣隙關係
-subplot(2,1,2);
-yyaxis left
-plot(w_range, g_current_vec * 1000, '-o', 'DisplayName', 'g fit');
-ylabel('Air Gap (mm)');
-yyaxis right
-plot(w_range, F_up, 'o-', 'LineWidth', 2, 'DisplayName', 'ACC'); hold on;
-plot(w_range, F_down, 'go-', 'LineWidth', 2, 'DisplayName', 'DEC');
+figure('Name',"force");
+plot(w_up, F_up, 'o-', 'LineWidth', 2, 'DisplayName', 'ACC'); hold on;
+plot(w_down, F_down, 'go-', 'LineWidth', 2, 'DisplayName', 'DEC');
+xline(mech.omega_C, '--', 'DisplayName', 'Hysteresis C');
+xline(target1(1), 'm--', 'DisplayName', 'Residual D');
 ylabel('Required Force(N)');
 xlabel('Speed (rpm)');
-legend('Location', 'north');
+legend('Location', 'northwest');
 grid on;
-title('Wedge Mechanism Thrust Analysis (With Friction Hysteresis)');
+title('Required Force');
+
+figure("Name", "AirGap")
+plot(w_up, g_up_vec * 1000, '-bo', 'DisplayName', 'ACC'); hold on;
+plot(w_down, g_down_vec * 1000, '-ro', 'DisplayName', 'DEC');
+xline(mech.omega_C, '--', 'DisplayName', 'Hysteresis C');
+xline(target1(1), 'm--', 'DisplayName', 'Residual D');
+ylabel('Air Gap (mm)');
+xlabel('Speed (rpm)');
+legend('Location', 'northwest');
+grid on;
+title('AirGap')
+
+% % 將ECB所有成功收斂的組別匯出至 Excel
+% filename = 'Results_1.xlsx';
+% saveParams(valid_results, T1, T2, mech_best, mech_fval, filename);

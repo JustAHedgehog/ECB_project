@@ -1,19 +1,23 @@
-function saveParams(valid_results, T1, T2, filename)
-    if ~exist('valid_results', 'var') || isempty(valid_results)
-        warning('沒有 valid_results 變數，無法匯出數據。請確認優化過程有成功找到解。');
+function saveParams(ECB_results, T1, T2, mech_best, mech_fval, filename)
+    % 輸入參數說明：
+    % ECB_results: 優化結果結構陣列
+    % T1, T2: 扭矩驗證數據
+    % mech_best: 機構最佳化參數向量 [r_r, L_r, N, alpha, mu_w, mu_t]
+    % mech_fval: 遲滯目標值 (最佳化後的 fval)
+    % filename: 檔名 (例如 'results.xlsx')
+    if ~exist('ECB_results', 'var') || isempty(ECB_results)
+        warning('沒有 ECB_results 變數，無法匯出數據。請確認優化過程有成功找到解。');
     else
-        fprintf('\n正在將 %d 組成功數據寫入 Excel...\n', length(valid_results));
+        fprintf('\n正在將 %d 組成功數據寫入 Excel...\n', length(ECB_results));
         % 預分配記憶體 (Pre-allocation)
-        n = length(valid_results);
+        n = length(ECB_results);
         
         % 定義要儲存的欄位
         col_p = zeros(n, 1);
         col_fval = zeros(n, 1);
-        
         % 機構與氣隙 (轉成 mm)
         col_g_ini = zeros(n, 1);
         col_g_final = zeros(n, 1);
-
         % 幾何尺寸 (轉成 mm)
         col_r_yo = zeros(n, 1);
         col_r_yi = zeros(n, 1);
@@ -25,39 +29,34 @@ function saveParams(valid_results, T1, T2, filename)
         col_l_m = zeros(n, 1);
         col_r_av = zeros(n, 1);
         col_PM_ratio = zeros(n, 1);
-        
         % 材料性質
         col_B_r = zeros(n, 1);
         col_H_c = zeros(n, 1);
         col_sigma = zeros(n, 1);
         col_mu_r = zeros(n, 1);
-
         % 剩餘參數
         col_theta_p = zeros(n,1);
         col_tau_p = zeros(n,1);
         col_w_m = zeros(n,1);
         col_H = zeros(n,1);
-        
         % 扭矩驗證 (驗證優化結果是否真的達標)
         col_Torque1 = zeros(n, 1);
         col_Torque2 = zeros(n, 1);
         
         % 迴圈提取數據
         for i = 1:n
-            res = valid_results(i);
+            res = ECB_results(i);
             p_struct = res.params;
             
-            % 優化變數 x 裡的氣隙 (依照您的定義 x(1)=g_ini, x(2)=g_final)
+            % 優化變數 x 裡的氣隙
             g_ini_val = res.x(1);
             g_final_val = res.x(2);
             
             % 填入數據
             col_p(i) = res.p;
             col_fval(i) = res.fval;
-            
-            col_g_ini(i) = g_ini_val * 1000; % mm
-            col_g_final(i) = g_final_val * 1000; % mm
-            
+            col_g_ini(i) = g_ini_val * 1000;
+            col_g_final(i) = g_final_val * 1000;
             col_r_yo(i) = p_struct.r_yo * 1000;
             col_r_yi(i) = p_struct.r_yi * 1000;
             col_t_y(i)  = p_struct.t_y * 1000;
@@ -68,17 +67,14 @@ function saveParams(valid_results, T1, T2, filename)
             col_l_m(i)  = p_struct.l_m * 1000;
             col_r_av(i) = p_struct.r_av * 1000;
             col_PM_ratio(i) = p_struct.PM_ratio;
-            
             col_B_r(i) = p_struct.B_r;
             col_H_c(i) = p_struct.H_c;
             col_sigma(i) = p_struct.sigma;
             col_mu_r(i) = p_struct.mu_r; 
-            
             col_theta_p(i) = p_struct.theta_p;
             col_tau_p(i) = p_struct.tau_p;
             col_w_m(i) = p_struct.w_m * 1000;
             col_H(i) = p_struct.H;
-            % 重新計算一次扭矩以記錄
             col_Torque1(i) = T1;
             col_Torque2(i) = T2;
         end
@@ -98,18 +94,32 @@ function saveParams(valid_results, T1, T2, filename)
                             'r_av', 'l_m', 't_m', 'PM_ratio', 'mu_r', ...
                             'theta_p', 'tau_p', 'w_m', 'H', ...
                             'Torque_Low', 'Torque_High'});
-        % 寫入 Excel
         
+        % 定義參數名稱與數值
+        extra_names = {'r_r'; 'L_r'; 'N'; 'alpha'; 'mu_w'; 'mu_t'; 'Target_fval'};
+        extra_vals  = [
+            mech_best(1) * 1000;  % r_r 轉 mm
+            mech_best(2) * 1000;  % L_r 轉 mm
+            mech_best(3);         % N
+            mech_best(4);         % alpha
+            mech_best(5);         % mu_w
+            mech_best(6);         % mu_t
+            mech_fval             % 遲滯目標值
+        ];
+        % 建立小型 Table
+        T_extra = table(extra_names, extra_vals, 'VariableNames', {'Extra_Parameter', 'Value'});
+        
+        %% 寫入 Excel
         % 檢查檔案是否存在，若存在則刪除舊檔 (避免寫入衝突或混淆)
         if exist(filename, 'file')
             delete(filename);
         end
         
-        writetable(T_out, filename);
+        writetable(T_out, filename, 'Sheet', 1, 'Range', 'A1');
+        start_row = n + 4;
+        range_str = sprintf('A%d', start_row);
+        % C. 寫入額外表格 (附加在下方)
+        writetable(T_extra, filename, 'Sheet', 1, 'Range', range_str);
         fprintf('數據已成功儲存至檔案: %s\n', filename);
-        
-        % 顯示預覽
-        disp('數據預覽 (前 5 筆):');
-        disp(head(T_out, 5));
     end
 end
