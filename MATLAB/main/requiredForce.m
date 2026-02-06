@@ -4,18 +4,17 @@ function [F_total, info] = requiredForce(mech_params, ECB, omega_rpm, g_curr, g_
     
     % 解包機械參數 (使用結構體欄位，程式碼可讀性更高)
     r_r = mech_params.r_r; 
-    L_r = mech_params.L_r;
     N   = mech_params.N;
     alpha_rad = deg2rad(mech_params.alpha);
     omega_rad = omega_rpm .* pi / 30;
     
     % 機構幾何計算
-    a_i = 0.5 .* L_r .* tan(pi .* (N - 2) / (2 .* N));
+    a_i = r_r .* tan(pi .* (N - 2) / (2 .* N));
     disp_x = (g_ini - g_curr) / 1000; % 行程計算
     r_omega = a_i + r_r + disp_x .* cot(alpha_rad) + 0.1 .* mech_params.r_yi; % 旋轉半徑 r_omega
     
     % 推力計算 (F_wedge)
-    m_r = pi .* r_r.^2 .* L_r .* mech_params.rho;
+    m_r = 4/3 .* pi .* r_r.^3 .* mech_params.rho;
     s = strcmp(direction, 'up') .* 2 - 1; 
     
     num = m_r .* (omega_rad.^2) .* r_omega .* (cos(alpha_rad) - s .* mech_params.mu_w .* sin(alpha_rad));

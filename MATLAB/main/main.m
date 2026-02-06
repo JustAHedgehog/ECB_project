@@ -78,9 +78,9 @@ ECB.g_e = 2.3717;     % TODO mm
 % 定義優化變數與邊界
 % x = [radius_r, L_r, N, alpha, mu_wedge, mu_t]
 % 單位：m, m, 1, deg, 1, 1
-mech.lb = [0.010, 0.020, 4,  30, 0.05, 0.05];
-mech.ub = [0.050, 0.080, 12, 60, 0.20, 0.20];
-mech.x0 = [0.030, 0.040, 8,  45, 0.10, 0.10];
+mech.lb = [0.010, 0.020, 4,  30, 0.10, 0.10];
+mech.ub = [0.050, 0.080, 12, 60, 0.20, 0.60];
+mech.x0 = [0.030, 0.040, 8,  45, 0.60, 0.20];
 mech.r_yi = params.r_yi;
 mech.R_hy = 0.2;
 mech.omega_C = target2(1) - mech.R_hy * (target2(1) - target1(1)); % 設定遲滯點 C 轉速
@@ -114,7 +114,7 @@ mech.T_E = calculateTorque(params, mech.omega_E, g_ini);
 [w_down, g_down_vec, T_down] = DownCurve(params, target1, target2, g_ini, g_final, mech);
 
 % 計算彈力的上下限
-F_up = requiredForce(best_params, ECB, w_up, g_up_vec, g_ini, 'up');
+[F_up, check] = requiredForce(best_params, ECB, w_up, g_up_vec, g_ini, 'up');
 [F_down, info] = requiredForce(best_params, ECB, w_down, g_down_vec, g_ini, 'down');
 
 
@@ -153,6 +153,25 @@ legend('Location', 'northwest');
 grid on;
 title('AirGap')
 
+figure("Name", "DEC");
+plot(w_down, info.Fw, 'o-', 'LineWidth', 2, 'DisplayName', 'Fw'); hold on;
+plot(w_down, info.Fm, 'o-', 'LineWidth', 2, 'DisplayName', 'Fm');
+xline(mech.omega_C, '--', 'DisplayName', 'Hysteresis C');
+xline(target1(1), 'm--', 'DisplayName', 'Residual D');
+ylabel('Required Force(N)');
+xlabel('Speed (rpm)');
+legend('Location', 'northwest');
+grid on;
+
+figure("Name", "ACC");
+plot(w_up, check.Fw, 'o-', 'LineWidth', 2, 'DisplayName', 'Fw'); hold on;
+plot(w_up, check.Fm, 'o-', 'LineWidth', 2, 'DisplayName', 'Fm');
+xline(mech.omega_C, '--', 'DisplayName', 'Hysteresis C');
+xline(target1(1), 'm--', 'DisplayName', 'Residual D');
+ylabel('Required Force(N)');
+xlabel('Speed (rpm)');
+legend('Location', 'northwest');
+grid on;
 % % 將ECB所有成功收斂的組別匯出至 Excel
 % filename = 'Results_1.xlsx';
 % saveParams(valid_results, T1, T2, mech_best, mech_fval, filename);
