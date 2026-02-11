@@ -10,7 +10,7 @@ function [F_total, info] = requiredForce(mech_params, ECB, omega_rpm, g_curr, g_
     
     % 機構幾何計算
     a_i = r_r .* tan(pi .* (N - 2) / (2 .* N));
-    disp_x = (g_ini - g_curr) / 1000; % 行程計算
+    disp_x = g_ini - g_curr; % 行程計算
     r_omega = a_i + r_r + disp_x .* cot(alpha_rad) + 0.1 .* mech_params.r_yi; % 旋轉半徑 r_omega
     
     % 推力計算 (F_wedge)

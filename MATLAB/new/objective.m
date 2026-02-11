@@ -1,38 +1,94 @@
-function f = objective(x, p)
-    % x 是演算法傳進來的一組變數
-    [ECB, mech] = xToParams(x, p);
+function values = objective(x, p, Target_Start, Target_End)
+    [ECB, mech, traj] = xToParams(x, p); % 解碼參數
+    w_ini = Target_Start(1);T_ini = Target_Start(2);
+    w_final = Target_End(1);T_final = Target_End(2);
     
-    % 建立 Wrapper
-    forceCalcWrapper = @(mech_p, ecb, w, g, g_ini, dir) requiredForce(mech_p, ecb, w, g, g_ini, dir);
+    % % 定義匿名函數：給定 g，計算 (T_calc - T_target)
+    % calc_err = @(g, w, T_t) calculateTorque(ECB, w, g) - T_t;
     
-    % 2. 計算物理遲滯比 R_hy
-    [R_hy, w_C, is_valid_R] = hysteresis(ECB, mech, w_ini, w_final, forceCalcWrapper);
+    % % 使用 fzero 尋找氣隙 (搜尋範圍 1mm ~ 20mm)
+    % try
+    %     g_ini = fzero(@(g) calc_err(g, w_ini, T_ini), [0.001, 0.020]);
+    %     g_final = fzero(@(g) calc_err(g, w_final, T_final), [0.001, 0.020]);
+    % catch ME % 捕捉錯誤訊息到變數 ME
+    %     fprintf('g fzero failed: %s\n', ME.message); 
+    %     values = [1e9, 1e9]; return;
+    % end
+    % % 物理限制檢查：g_ini 必須大於 g_final (轉速高氣隙小)
+    % if g_ini <= g_final
+    %     values = [1e9, 1e9]; return;
+    % end
+
+    % 定義搜尋範圍 (單位: m)
+    g_search_range = [0.001, 0.025]; % 1mm 到 25mm
     
-    % 如果計算出的遲滯無效(例如負值)，給予極大懲罰
-    penalty_R = 0;
-    if ~is_valid_R
-        penalty_R = 1000; % 懲罰項
+    % --- 處理 Start 點 ---
+    [g_ini, pen_start] = solve_gap_robust(ECB, w_ini, T_ini, g_search_range);
+    
+    % --- 處理 End 點 ---
+    [g_final, pen_end] = solve_gap_robust(ECB, w_final, T_final, g_search_range);
+    
+    % 如果任何一個點無法達成目標 (有 Penalty)，則直接回傳懲罰值
+    if pen_start > 0 || pen_end > 0
+        % 懲罰值 = 基礎罰分 + 誤差平方 (讓演算法知道誰比較接近)
+        % 這裡乘以一個權重 (e.g., 1000) 讓誤差被放大，優於純體積目標
+        Total_Penalty = 1e4 + (pen_start + pen_end) * 1000;
+        values = [Total_Penalty, Total_Penalty]; 
+        return;
+    end
+    
+    % --- 物理限制檢查 ---
+    % 1. 氣隙邏輯: 高轉速氣隙(g_final) 必須小於 低轉速氣隙(g_ini)
+    if g_final >= g_ini
+        % 給予一個與 "差距" 成正比的懲罰，引導它修正
+        diff = (g_final - g_ini) * 1000; % mm 差
+        values = [1e4 + diff^2, 1e4 + diff^2];
+        return;
     end
 
-    % 3. 計算遲滯面積 (Area)
-    % 這裡需要重新生成包含真實 w_C 的下降路徑
     try
-        % 上升段積分
-        w_vec = linspace(w_ini, w_final, 20);
-        [~, T_up] = solve_equilibrium_path(params, mech, w_vec, 'up', w_final, w_C);
+        w_vec = linspace(w_ini, w_final, 30);
+        % 上升段氣隙公式
+        g_up = g_ini - (g_ini - g_final) .* ((w_vec - w_ini) ./ (w_final - w_ini)) .^ traj.n_up;
         
-        % 下降段積分 (關鍵：從 w_final -> w_C 保持，w_C -> w_ini 釋放)
-        [~, T_down] = solve_equilibrium_path(params, mech, w_vec, 'down', w_final, w_C);
+        % 計算上升段扭矩
+        T_up = zeros(size(w_vec));
+        for i = 1:length(w_vec)
+            T_up(i) = calculateTorque(ECB, w_vec(i), g_up(i));
+        end
         
-        Area = trapz(w_vec, abs(T_up - T_down));
+        [F_B, info] = requiredForce(mech, ECB, w_final, g_final, g_ini, 'up');
+        w_C = hysteresisPoint(F_B, mech, g_final, g_ini, w_final);
+        % 生成 "下降段" 軌跡並計算扭矩 (用於算面積)
+        R_hy = (w_final - w_C) / (w_final - w_ini);
+        % 若 R_hy 不合理 (<0)，給予懲罰
+        if R_hy < 0 || 0.01 - info.den <= 0 || info.Fw <= 0  || (ECB.r_yo - ECB.r_yi) < 0.020
+            values = [1e9, 1e9]; return;
+        end
+        g_down = zeros(size(w_vec));
+        for i = 1:length(w_vec)
+            w = w_vec(i);
+            if w >= w_C
+                g_down(i) = g_final; % 保持在最小氣隙
+            else
+                if w_C == w_ini
+                    g_down(i) = g_ini;
+                else
+                    ratio = (w - w_ini) / (w_C - w_ini);
+                    if ratio < 0, ratio = 0; end
+                    g_down(i) = g_ini - (g_ini - g_final) * (ratio ^ traj.n_down);
+                end
+            end
+        end
+        T_down = zeros(size(w_vec));
+        for i = 1:length(w_vec)
+            T_down(i) = calculateTorque(ECB, w_vec(i), g_down(i));
+        end
+        
+        Area = trapz(w_vec, abs(T_up - T_down)); % hysteresis area
+        Volume = pi * ECB.r_yo^2 * (2 * ECB.t_y + ECB.t_m + traj.g_ini + ECB.t_c + 2 * mech.r_r);
+        values = [Area, Volume, R_hy];
     catch
-        Area = 1e6; % 計算失敗懲罰
+        values = [1e5, 1e5];
     end
-    % 4. 計算體積
-    Volume = pi * params.r_yo^2 * (2*params.t_m + params.g1 + 0.030);
-    
-    % 5. 輸出目標 (最小化面積, 最小化 R_hy, 最小化體積)
-    % 注意：如果你希望 R_hy 越大越好，請加負號
-    % 根據你的描述 "目標函數為最小化... R_hy"，保持正號即可
-    f = [Area + penalty_R, R_hy + penalty_R, Volume];
 end

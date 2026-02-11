@@ -1,4 +1,4 @@
-function [ECB, mech] = xToParams(x, p)
+function [ECB, mech, traj] = xToParams(x, p)
     ECB = struct();
     ECB.mu_0 = 4*pi*1e-7;
     ECB.mu_y = 4000;
@@ -8,19 +8,17 @@ function [ECB, mech] = xToParams(x, p)
     ECB.B_r = 1.29;
     
     % 1. 讀取獨立變數
-    ECB.g1 = x(1);
-    ECB.g2 = x(2);
-    ECB.r_yo = x(3);
-    ECB.r_yi = x(4);
-    ECB.t_y = x(5); 
+    ECB.r_yo = x(1);
+    ECB.r_yi = x(2);
+    ECB.t_y = x(3); 
     ECB.r_co = ECB.r_yo; ECB.r_ci = ECB.r_yi;
-    ECB.t_c = x(7); 
-    ECB.PM_ratio = x(12); ECB.t_m = x(13);
+    ECB.t_c = x(4); 
+    ECB.PM_ratio = x(7); ECB.t_m = x(8);
     ECB.mu_r = ECB.B_r / ECB.H_c / ECB.mu_0;
     
     % 2. 解碼依賴變數 (Transformations)
-    k_lm = x(10);  % 磁石長度比例
-    k_pos = x(11); % 磁石位置比例
+    k_lm = x(5);  % 磁石長度比例
+    k_pos = x(6); % 磁石位置比例
     
     % 邏輯 A: l_m 必須小於可用空間
     space_available = ECB.r_yo - ECB.r_yi;
@@ -49,10 +47,13 @@ function [ECB, mech] = xToParams(x, p)
     ECB.w_m = ECB.PM_ratio * ECB.tau_p;
     ECB.H = ((ECB.r_yo - (ECB.r_av + ECB.l_m / 2)) + ...
                 (ECB.r_av - ECB.l_m / 2) - ECB.r_yi) / 2;
-    mech.r_r   = x(12);
-    mech.L_r   = x(13);
-    mech.N     = round(x(14));
-    mech.alpha = x(15);
-    mech.mu_w  = x(16);
-    mech.mu_t  = x(17);
+    mech.r_r   = x(9);
+    mech.N     = round(x(10));
+    mech.alpha = x(11);
+    mech.mu_w  = x(12);
+    mech.mu_t  = x(13);
+    mech.rho   = 7840;
+    % 軌跡參數
+    traj.n_up = x(14);
+    traj.n_down = x(15);
 end
