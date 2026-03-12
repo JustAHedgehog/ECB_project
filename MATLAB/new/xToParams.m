@@ -47,6 +47,7 @@ function [ECB, mech, traj] = xToParams(x, p)
     ECB.w_m = ECB.PM_ratio * ECB.tau_p;
     ECB.H = ((ECB.r_yo - (ECB.r_av + ECB.l_m / 2)) + ...
                 (ECB.r_av - ECB.l_m / 2) - ECB.r_yi) / 2;
+    % ECB.H = (ECB.r_yo - ECB.r_yi - ECB.l_m) / 2;
     mech.r_r   = x(9);
     mech.N     = round(x(10));
     mech.alpha = x(11);
