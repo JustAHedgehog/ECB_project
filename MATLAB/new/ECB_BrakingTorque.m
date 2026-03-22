@@ -1,17 +1,19 @@
-function [T_total] = ECB_BrakingTorque(params)
+function [T_total] = ECB_BrakingTorque(params, rpm, g_curr)
 % AFPM_ECB_Analytical_Model：基於 Lubin & Rezzoug (2017) 的 3D 閉式解析解 (Eq. 49)
 
     %% 1. 參數提取與單位轉換
     mu0 = 4 * pi * 1e-7;
-    R1 = params.R1; R2 = params.R2; R3 = params.R3; % R1, R2: 磁鐵內徑與外徑 (m); R3: 導體盤半徑 (m) (邊界條件)
-    t_m = params.t_m; % t_m: 磁鐵厚度 (m)
-    g = params.g; % g: 氣隙長度 (m)
-    t_c = params.t_c; % t_c: 導體盤厚度 (m)
-    p = params.p; % p: 極對數 (Pole pairs)
-    Br = params.Br; % Br: 磁鐵剩磁 (T)
-    sigma = params.sigma; % sigma: 導體盤電導率 (S/m)
-    PM_ratio = params.PM_ratio; % PM_ratio: 磁極覆蓋率 (Pole-arc to pole-pitch ratio, alpha)
-    Omega = params.Omega_rpm * (2*pi/60); % % Omega_rpm: 滑差轉速 (RPM), 換算 rad/s
+    R1 = params.r_av - params.l_m/2; % 磁鐵內徑 (m)
+    R2 = params.r_av + params.l_m/2; % 磁鐵外徑 (m)
+    R3 = params.r_yo;                % 導體盤半徑 (m) (邊界條件)
+    t_m = params.t_m;                % t_m: 磁鐵厚度 (m)
+    g = g_curr;                      % g: 氣隙長度 (m)
+    t_c = params.t_c;                % t_c: 導體盤厚度 (m)
+    p = params.p;                    % p: 極對數 (Pole pairs)
+    Br = params.B_r;                 % Br: 磁鐵剩磁 (T)
+    sigma = params.sigma;            % sigma: 導體盤電導率 (S/m)
+    PM_ratio = params.PM_ratio;      % PM_ratio: 磁極覆蓋率 (Pole-arc to pole-pitch ratio, alpha)
+    Omega = rpm * (2*pi/60); % rpm: 滑差轉速 (RPM), 換算 rad/s
     
     N = params.N_harm; % N_harm: 諧波次數 (奇數 n 的最大值, e.g., 20)
     K = params.K_bessel; % K_bessel: 貝索函數根的數量 (k 的最大值, e.g., 50)

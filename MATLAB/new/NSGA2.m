@@ -5,9 +5,9 @@ Target_Start = [255.6, 1.833]; % w_ini, T_ini
 Target_End   = [573.0, 18.39]; % w_final, T_final
 
 % 定義優化變數範圍 (Lower Bound, Upper Bound)
-%          r_yo   r_yi   t_y    t_c   k_lm   k_pos   PM   t_m    r_r   N  alpha mu_w  mu_t
-lb_geo = [0.040, 0.016, 0.001, 0.002, 0.10,  0.00,  0.4, 0.001, 0.010, 4,  30, 0.10, 0.10];
-ub_geo = [0.110, 0.060, 0.010, 0.050, 0.90,  1.00,  0.9, 0.009, 0.050, 12, 60, 0.20, 0.60];
+%          r_yo   r_yi   t_y    t_c   k_lm   k_pos  PM   t_m    r_r    m_r   N   k_w  alpha mu_w  mu_t
+lb_geo = [0.050, 0.014, 0.001, 0.002, 0.10,  0.00, 0.4, 0.001, 0.010, 0.010, 4,  0.01, 15,  0.10, 0.10];
+ub_geo = [0.110, 0.040, 0.010, 0.050, 0.90,  1.00, 0.9, 0.009, 0.050, 0.300, 12, 0.99, 75,  0.20, 0.60];
 % 軌跡參數: [n_up, n_down]，n = 1 為線性, n < 1 為凸, n > 1 為凹
 lb_traj = [0.5, 0.5]; 
 ub_traj = [3.0, 3.0];
@@ -16,15 +16,15 @@ lb = [lb_geo, lb_traj];
 ub = [ub_geo, ub_traj];
 nvars = length(lb);
 
-% 設定整數變數 (N 是第 10 個變數)
-IntCon = [10]; 
+% 設定整數變數 (N 是第 11 個變數)
+IntCon = [11]; 
 
 % NSGA-II 設定
 options = optimoptions('gamultiobj', ...
     'PopulationSize', 500, ...
     'ParetoFraction', 0.4, ...
     'MaxGenerations', 1000, ...
-    'display', 'final', ...
+    'display', 'iter', ...
     'UseParallel', true); % 建議開啟平行運算加速
 
 % 定義函數 Handle
@@ -125,7 +125,7 @@ function data = analyze_result(x, p, Target_Start, Target_End)
     
     T_up = zeros(size(w_vec));
     for i = 1:length(w_vec)
-        T_up(i) = calculateTorque(ECB, w_vec(i), g_up(i));
+        T_up(i) = ECB_BrakingTorque(ECB, w_vec(i), g_up(i));
     end
     
     % --- 5. 計算遲滯點與下降段 (Deceleration) ---
@@ -159,7 +159,7 @@ function data = analyze_result(x, p, Target_Start, Target_End)
     % 計算下降扭矩
     T_down = zeros(size(w_vec));
     for i = 1:length(w_vec)
-        T_down(i) = calculateTorque(ECB, w_vec(i), g_down(i));
+        T_down(i) = ECB_BrakingTorque(ECB, w_vec(i), g_down(i));
     end
     
     % --- 6. 打包數據回傳 ---

@@ -6,6 +6,8 @@ function [ECB, mech, traj] = xToParams(x, p)
     ECB.sigma = 38 * 10^6;
     ECB.H_c = 907 * 10^3; % N40, 矯頑力Hc (A/m)
     ECB.B_r = 1.29;
+    ECB.N_harm = 15; % 奇數諧波取前 15 項
+    ECB.K_bessel = 50; % 貝索根取前 50 個
     
     % 1. 讀取獨立變數
     ECB.r_yo = x(1);
@@ -49,12 +51,13 @@ function [ECB, mech, traj] = xToParams(x, p)
                 (ECB.r_av - ECB.l_m / 2) - ECB.r_yi) / 2;
     % ECB.H = (ECB.r_yo - ECB.r_yi - ECB.l_m) / 2;
     mech.r_r   = x(9);
-    mech.N     = round(x(10));
-    mech.alpha = x(11);
-    mech.mu_w  = x(12);
-    mech.mu_t  = x(13);
-    mech.rho   = 7840;
+    mech.m_r   = x(10);
+    mech.N     = round(x(11));
+    mech.k_w   = x(12);
+    mech.alpha = x(13);
+    mech.mu_w  = x(14);
+    mech.mu_t  = x(15);
     % 軌跡參數
-    traj.n_up = x(14);
-    traj.n_down = x(15);
+    traj.n_up = x(16);
+    traj.n_down = x(17);
 end

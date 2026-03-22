@@ -1,11 +1,22 @@
 function values = objective(x, p, Target_Start, Target_End)
     [ECB, mech, traj] = xToParams(x, p); % 解碼參數
+    r_w_min = 3 * ECB.r_yi;
+    r_w_max = ECB.r_yo - 0.005 - 2 * mech.r_r * cot(deg2rad(mech.alpha));
+
+    % 檢查 1：上下界合理性 (如果 min >= max，代表機構塞不進去這點空間)
+    if r_w_min >= r_w_max
+        values = [1e9, 1e9]; % 給予高懲罰，直接跳過這組解
+        return;
+    end
+
+    % 計算 r_omega 基準位置 (k_pos 就是你 x 陣列裡 0~1 的那個變數)
+    mech.r_omega_ini = r_w_min + mech.k_w * (r_w_max - r_w_min);
+
     w_ini = Target_Start(1);T_ini = Target_Start(2);
     w_final = Target_End(1);T_final = Target_End(2);
     
     % % 定義匿名函數：給定 g，計算 (T_calc - T_target)
     % calc_err = @(g, w, T_t) calculateTorque(ECB, w, g) - T_t;
-    
     % % 使用 fzero 尋找氣隙 (搜尋範圍 1mm ~ 20mm)
     % try
     %     g_ini = fzero(@(g) calc_err(g, w_ini, T_ini), [0.001, 0.020]);
@@ -54,7 +65,7 @@ function values = objective(x, p, Target_Start, Target_End)
         % 計算上升段扭矩
         T_up = zeros(size(w_vec));
         for i = 1:length(w_vec)
-            T_up(i) = calculateTorque(ECB, w_vec(i), g_up(i));
+            T_up(i) = ECB_BrakingTorque(ECB, w_vec(i), g_up(i));
         end
         
         [F_B, info] = requiredForce(mech, ECB, w_final, g_final, g_ini, 'up');
@@ -82,7 +93,7 @@ function values = objective(x, p, Target_Start, Target_End)
         end
         T_down = zeros(size(w_vec));
         for i = 1:length(w_vec)
-            T_down(i) = calculateTorque(ECB, w_vec(i), g_down(i));
+            T_down(i) = ECB_BrakingTorque(ECB, w_vec(i), g_down(i));
         end
         
         Area = trapz(w_vec, abs(T_up - T_down)); % hysteresis area

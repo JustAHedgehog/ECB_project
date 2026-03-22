@@ -1,39 +1,31 @@
-function Fz = ECB_AxialForce(speed_rpm, c_gap)
-    % =========================================================
-    % 軸向永磁渦電流制動器 (AFPM-ECB) 軸向力解析計算
-    % 參考文獻：3-D Analytical Model for Axial-Flux Eddy-Current Couplings...
-    % =========================================================
-
-    %% 0. 定義基本物理量與幾何參數 (參照 Table I)
+function Fz = ECB_AxialForce(params, rpm, g_curr)
+    % 定義基本物理量與幾何參數
     mu0 = 4 * pi * 1e-7;   % 真空磁導率 (H/m)
     
-    % 幾何尺寸 (將 mm 轉換為 m)
-    R1 = 30e-3;            % 磁鐵內徑
-    R2 = 60e-3;            % 磁鐵外徑
-    R0 = 15e-3;            % 銅盤內徑
-    R3 = 75e-3;            % 銅盤外徑
-    b = 10e-3;             % 磁鐵厚度
-    c = c_gap;             % 氣隙厚度 (可變數, 例如 3e-3)
-    d = 5e-3;              % 銅盤厚度
+    % 幾何尺寸 - 從 params 結構中提取 (將 mm 轉換為 m)
+    R0 = params.r_yi;        % 銅盤內徑
+    Rm = params.r_av;        % 平均半徑
+    L = params.l_m;          % 磁鐵徑向長度
+    R3 = params.r_yo;        % 銅盤外徑
+    t_m = params.t_m;        % 磁鐵厚度
+    g = g_curr;              % 氣隙厚度
+    t_c = params.t_c;        % 銅盤厚度
     
-    alpha_p = 0.9;         % 極弧係數 (Pole-arc to pole-pitch ratio)
-    p = 5;                 % 極對數
-    Br = 1.25;             % 剩磁 (T)
-    sigma = 57e6;          % 銅導電率 (S/m)
+    alpha_p = params.PM_ratio;     % 極弧係數 (Pole-arc to pole-pitch ratio)
+    p = params.p;                  % 極對數
+    Br = params.B_r;                % 剩磁 (T)
+    sigma = params.sigma;          % 銅導電率 (S/m)
     
-    % 展開諧波項數 (Table I 建議為 10)
-    N_harmonics = 10;
-    K_harmonics = 10;
+    N_harmonics = params.N_harm;
+    K_harmonics = params.K_bessel;
     
     %% 衍生參數計算
-    Rm = (R1 + R2) / 2;    % 平均半徑
-    L = R2 - R1;           % 磁鐵徑向長度
     H = R3 - R0;           % 銅盤徑向長度
     tau = Rm * pi / p;     % 極距
     
     % 將轉速轉換為線速度 Vx (m/s)
-    Omega = speed_rpm * (2 * pi / 60); % 機械角速度 (rad/s)
-    Vx = Omega * Rm;                   % 導體盤在平均半徑的線速度
+    omega = rpm * (2 * pi / 60); % 機械角速度 (rad/s)
+    Vx = omega * Rm;                   % 導體盤在平均半徑的線速度
 
     %% 核心計算迴圈
     Summation_Term = 0; % 初始化雙重迴圈的總和
@@ -58,8 +50,8 @@ function Fz = ECB_AxialForce(speed_rpm, c_gap)
             % --- 步驟 3：計算核心複數參數 r_bar (附錄 A.3, A.4) ---
             chi_nk = alpha_nk / gamma_nk;
             
-            num_r = cosh(alpha_nk * c) * sinh(gamma_nk * d) + chi_nk * sinh(alpha_nk * c) * cosh(gamma_nk * d);
-            den_r = cosh(alpha_nk * (b + c)) * sinh(gamma_nk * d) + chi_nk * sinh(alpha_nk * (b + c)) * cosh(gamma_nk * d);
+            num_r = cosh(alpha_nk * g) * sinh(gamma_nk * t_c) + chi_nk * sinh(alpha_nk * g) * cosh(gamma_nk * t_c);
+            den_r = cosh(alpha_nk * (t_m + g)) * sinh(gamma_nk * t_c) + chi_nk * sinh(alpha_nk * (t_m + g)) * cosh(gamma_nk * t_c);
             r_bar = - (num_r / den_r);
             
             % 提取共軛複數與絕對值平方
@@ -68,7 +60,7 @@ function Fz = ECB_AxialForce(speed_rpm, c_gap)
             
             % --- 步驟 4-2：計算單項加總 (公式 41 中括號內的項) ---
             % Term = M_nk^2 * (1 + |r|^2 + (r + r*) * cosh(alpha_nk * b))
-            term = M_nk^2 * (1 + r_abs_sq + (r_bar + r_bar_conj) * cosh(alpha_nk * b));
+            term = M_nk^2 * (1 + r_abs_sq + (r_bar + r_bar_conj) * cosh(alpha_nk * t_m));
             
             Summation_Term = Summation_Term + term;
         end
