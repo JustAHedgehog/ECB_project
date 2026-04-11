@@ -1,7 +1,7 @@
 function [g_sol, penalty] = solve_gap_robust(params, w, T_target, range)
     % 計算邊界扭矩
-    T_max_possible = calculateTorque(params, w, range(1)); % g_min (最大扭矩)
-    T_min_possible = calculateTorque(params, w, range(2)); % g_max (最小扭矩)
+    T_max_possible = ECB_BrakingTorque(params, w, range(1)); % g_min (最大扭矩)
+    T_min_possible = ECB_BrakingTorque(params, w, range(2)); % g_max (最小扭矩)
     
     if T_target > T_max_possible
         % [情況 A] 設計太弱：即使氣隙最小，扭矩還是不夠
@@ -16,7 +16,7 @@ function [g_sol, penalty] = solve_gap_robust(params, w, T_target, range)
     else
         % [情況 C] 目標在範圍內，安全使用 fzero
         try
-            calc_err = @(g) calculateTorque(params, w, g) - T_target;
+            calc_err = @(g) ECB_BrakingTorque(params, w, g) - T_target;
             g_sol = fzero(calc_err, range);
             penalty = 0; % 成功求解，無懲罰
         catch
