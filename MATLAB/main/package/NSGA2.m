@@ -5,32 +5,28 @@ Target_Start = [255.6, 1.833]; % w_ini, T_ini
 Target_End   = [573.0, 18.39]; % w_final, T_final
 
 % 定義優化變數範圍 (Lower Bound, Upper Bound)
-%          1    2      3      4       5     6       7    8     9     10     11    12   13   14    15    16
-%          p   r_yo   r_yi   t_y    t_c    k_lm   k_pos  PM   t_m    r_r    m_r   N   k_m  alpha mu_w  mu_t
-lb_geo = [ 3, 0.050, 0.014, 0.001, 0.0005, 0.10,  0.00, 0.4, 0.001, 0.010, 0.010,  3, 0.01, 15,  0.10, 0.10];
-ub_geo = [10, 0.110, 0.020, 0.010, 0.005,  0.90,  1.00, 0.9, 0.009, 0.050, 0.300, 12, 0.99, 75,  0.20, 0.60];
-% 軌跡參數: [n_up, n_down]，n = 1 為線性, n < 1 為凸, n > 1 為凹
-lb_traj = [0.5, 0.5]; 
-ub_traj = [3.0, 3.0];
+%      1    2      3      4       5     6      7    8      9     10   11   12   13      14
+%      p   r_yo   r_yi   t_y    t_c    k_lm   PM   t_m    r_r    m_r   N   k_m alpha  beta
+lb = [ 3, 0.050, 0.014, 0.001, 0.001, 0.10, 0.5, 0.002, 0.010, 0.010,  3, 0.01,   15,   30];
+ub = [10, 0.110, 0.020, 0.010, 0.005, 0.90, 0.9, 0.010, 0.050, 0.300, 12, 0.99,   75,   60];
 
-lb = [lb_geo, lb_traj];
-ub = [ub_geo, ub_traj];
 nvars = length(lb);
+g_search_range = [0.001, 0.025]; % 1mm 到 25mm
 
 % 設定整數變數 (p 是第 1 個變數, N 是第 12 個變數)
-IntCon = [1, 12]; 
+IntCon = [1, 11]; 
 
 % NSGA-II 設定
 options = optimoptions('gamultiobj', ...
     'PopulationSize', 100, ...
     'ParetoFraction', 0.4, ...
-    'MaxGenerations', 50, ...
+    'MaxGenerations', 10, ...
     'display', 'iter', ...
-    'UseParallel', false); % 建議開啟平行運算加速
+    'UseParallel', true); % 建議開啟平行運算加速
 
 
 % 目標函數 (最小化 [Area, R_hy, Volume])
-FitnessFcn = @(x) objective(x, Target_Start, Target_End);
+FitnessFcn = @(x) objective(x, Target_Start, Target_End, g_search_range);
 
 % 執行優化
 [x_pareto, f_pareto, exitflag, output] = gamultiobj(FitnessFcn, ...    % 目標函數
@@ -49,7 +45,7 @@ FitnessFcn = @(x) objective(x, Target_Start, Target_End);
 x_optimal = x_pareto(best_idx, :);
 
 % 呼叫診斷函數
-results = analyze_result(x_optimal, Target_Start, Target_End);
+results = analyze_result(x_optimal, Target_Start, Target_End, g_search_range);
 
 % 3. 檢查是否成功達成目標
 if ~results.success
@@ -97,12 +93,9 @@ plot(Target_End(1), Target_End(2), 'ko', 'MarkerFaceColor', 'g');
 xlabel('Speed (rpm)'); ylabel('Torque (Nm)');
 title('對應的扭矩曲線'); grid on;
 
-function data = analyze_result(x, p, Target_Start, Target_End)
+function data = analyze_result(x, Target_Start, Target_End, g_search_range)
     % 1. 解碼參數 (必須與 objective 內一致)
-    [ECB, mech, traj] = xToParams(x, p);
-    
-    % 定義搜尋範圍 (單位: m)
-    g_search_range = [0.001, 0.025]; 
+    [ECB, mech] = xToParams(x);
     
     % --- 2. 使用 Robust Solver 反求 g_ini 和 g_final ---
     % 即使最佳解可能稍有誤差，我們也要算出它實際的物理狀態
@@ -117,58 +110,61 @@ function data = analyze_result(x, p, Target_Start, Target_End)
     % --- 3. 生成運作區間數據 ---
     % 解析度設高一點 (例如 100 點) 以獲得平滑曲線
     w_vec = linspace(Target_Start(1), Target_End(1), 100);
-    
-    % --- 4. 計算上升段 (Acceleration) ---
-    % 氣隙公式
-    g_up = g_ini - (g_ini - g_final) .* ((w_vec - Target_Start(1)) ./ (Target_End(1) - Target_Start(1))) .^ traj.n_up;
-    
-    T_up = zeros(size(w_vec));
-    for i = 1:length(w_vec)
-        T_up(i) = ECB_BrakingTorque(ECB, w_vec(i), g_up(i));
-    end
-    
-    % --- 5. 計算遲滯點與下降段 (Deceleration) ---
-    % 這裡需要計算機構力平衡，找出遲滯釋放點 C
-    % B點狀態 (最高轉速)
-    F_B= requiredForce(mech, ECB, Target_End(1), g_final, g_ini, 'up');
-    
-    % 尋找 w_C (下降段推力 = F_total_B 的轉速)
-    w_C = hysteresisPoint(F_B, mech, g_final, g_ini, Target_End(1));
-    
+    T_up = zeros(1, 100); 
+    T_down = zeros(1, 100);
+    g_up_vec = zeros(1, 100);
+    g_down_vec = zeros(1, 100);
+
+    F_s1 = requiredForce(mech, ECB, Target_Start(1), g_final, g_ini, 'up');
+    F_s2 = requiredForce(mech, ECB, Target_End(1), g_final, g_ini, 'up');
+    F_spring = @(g) F_s1 + k_spring * (g_ini - g);
+    w_C = hysteresisPoint(F_s2, mech, ECB, g_final, g_ini, Target_End(1));
     R_hy = (Target_End(1) - w_C) / (Target_End(1) - Target_Start(1));
-    
-    % 計算下降氣隙 g_down
-    g_down = zeros(size(w_vec));
+
     for i = 1:length(w_vec)
         w = w_vec(i);
-        if w >= w_C
-            g_down(i) = g_final; % 滯留
-        else
-            % 回復
-            if w_C > Target_Start(1)
-                ratio = (w - Target_Start(1)) / (w_C - Target_Start(1));
-            else
-                ratio = 0;
-            end
-            if ratio < 0, ratio = 0; end
-            g_down(i) = g_ini - (g_ini - g_final) * (ratio ^ traj.n_down);
+        
+        % 定義力平衡方程式： [機構與磁力總推力] - [彈簧力] = 0
+        eq_up   = @(g) requiredForce(mech, ECB, w, g, g_final, 'up')   - F_spring(g);
+        eq_down = @(g) requiredForce(mech, ECB, w, g, g_final, 'down') - F_spring(g);
+        
+        % --- 4. 計算上升/下降段的氣隙軌跡 ---
+        try
+            % 限制搜尋範圍在 [g_final, g_ini]
+            g_up_vec(i) = fzero(eq_up, [g_final, g_ini]);
+        catch
+            g_up_vec(i) = g_final; % 若無解則代表被卡死在最底
         end
+
+        if w >= w_C
+            g_down_vec(i) = g_final; % 保持在最小氣隙
+        else
+            if w_C == Target_Start(1)
+                g_down_vec(i) = g_ini;
+            else
+                try
+                    % 為了加速，建議加上 optimset('Display','off')
+                    opts = optimset('Display','off');
+                    g_down_vec(i) = fzero(eq_down, [g_final, g_ini], opts);
+                catch
+                    g_down_vec(i) = g_ini; % 若 fzero 失敗，設定一個安全預設值
+                end
+            end
+        end
+        
+        % 計算對應的扭矩
+        T_up(i)   = ECB_BrakingTorque(ECB, w, g_up_vec(i));
+        T_down(i) = ECB_BrakingTorque(ECB, w, g_down_vec(i));
     end
     
-    % 計算下降扭矩
-    T_down = zeros(size(w_vec));
-    for i = 1:length(w_vec)
-        T_down(i) = ECB_BrakingTorque(ECB, w_vec(i), g_down(i));
-    end
-    
-    % --- 6. 打包數據回傳 ---
+    % --- 5. 打包數據回傳 ---
     data.w_vec = w_vec;
-    data.g_up = g_up;
-    data.g_down = g_down;
+    data.g_up = g_up_vec;
+    data.g_down = g_down_vec;
     data.T_up = T_up;
     data.T_down = T_down;
     data.w_C = w_C;
     data.R_hy = R_hy;
-    data.ECB = ECB;   % 保存幾何參數以便查閱
+    data.ECB = ECB;
     data.mech = mech; 
 end

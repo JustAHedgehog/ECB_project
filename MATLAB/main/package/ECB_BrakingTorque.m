@@ -1,4 +1,4 @@
-function [T_total] = ECB_BrakingTorque(params, rpm, g_curr)
+function [T_total, info] = ECB_BrakingTorque(params, rpm, g_curr)
 % AFPM_ECB_Analytical_Model：基於 Lubin & Rezzoug (2017) 的 3D 閉式解析解 (Eq. 49)
 
     %% 1. 參數提取與單位轉換
@@ -12,11 +12,11 @@ function [T_total] = ECB_BrakingTorque(params, rpm, g_curr)
     p = params.p;                    % p: 極對數 (Pole pairs)
     Br = params.B_r;                 % Br: 磁鐵剩磁 (T)
     sigma = params.sigma;            % sigma: 導體盤電導率 (S/m)
-    PM_ratio = params.PM_ratio;      % PM_ratio: 磁極覆蓋率 (Pole-arc to pole-pitch ratio, alpha)
+    PM_ratio = params.PM_ratio;      % PM_ratio: 磁極覆蓋率 (Pole-arc to pole-pitch ratio)
     Omega = rpm * (2*pi/60); % rpm: 滑差轉速 (RPM), 換算 rad/s
     
-    N = params.N_harm; % N_harm: 諧波次數 (奇數 n 的最大值, e.g., 20)
-    K = params.K_bessel; % K_bessel: 貝索函數根的數量 (k 的最大值, e.g., 50)
+    N = params.N_harm; % N_harm: 諧波次數 (奇數 n 的最大值)
+    K = params.K_bessel; % K_bessel: 貝索函數根的數量 (k 的最大值)
     
     T_sum = 0; % 重置加總變數
 
@@ -83,8 +83,9 @@ function [T_total] = ECB_BrakingTorque(params, rpm, g_curr)
     
     % 最終係數乘積
     coeff = (pi / 2) * mu0 * R3^2 * p;
-    T_total = coeff * T_sum;
-
+    T_total = abs(coeff * T_sum);
+    info.T_sum = T_sum; % 回傳中間變數以供分析
+    info.base_term = base_term;
 end
 
 %% 輔助函數：尋找貝索函數 J_nu(x) = 0 的第 k 個根

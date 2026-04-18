@@ -21,7 +21,7 @@ function [g_sol, penalty] = solve_gap_robust(params, w, T_target, range)
             penalty = 0; % 成功求解，無懲罰
         catch
             g_sol = range(1);
-            penalty = 1e5; % 未知錯誤
+            penalty = 1e4; % 求解失敗，給予高懲罰
         end
     end
 end

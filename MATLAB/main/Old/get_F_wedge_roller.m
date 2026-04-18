@@ -1,4 +1,4 @@
-function Fw = get_F_wedge(x, omega_rpm, g_curr, g_ini, direction, r_yi)
+function Fw = get_F_wedge_roller(x, omega_rpm, g_curr, g_ini, direction, r_yi)
     % x: 優化變數向量 [radius_r, L_r, N, alpha, mu_w, mu_t]
     r_r = x(1); 
     L_r = x(2); % 這裡假設 L_omega = L_r

@@ -47,6 +47,7 @@ function [F_total, info] = requiredForce(mech, ECB, omega_rpm, g_curr, g_ini, di
     F_total = Fw + F_mag;
 
     info.Fw = Fw;
+    info.Nt = Nt;
     info.F_mag = F_mag;
     info.r_omega = r_w;
 end
