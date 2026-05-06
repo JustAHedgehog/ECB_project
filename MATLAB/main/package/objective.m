@@ -14,9 +14,6 @@ function values = objective(x, Target_Start, Target_End, g_search_range)
     w_ini = Target_Start(1);T_ini = Target_Start(2);
     w_final = Target_End(1);T_final = Target_End(2);
     
-    % % 定義搜尋範圍 (單位: m)
-    % g_search_range = [0.001, 0.025]; % 1mm 到 25mm
-    
     % 3. 反求 g_ini, g_final
     [g_ini, pen_start] = solve_gap_robust(ECB, w_ini, T_ini, g_search_range);
     [g_final, pen_end] = solve_gap_robust(ECB, w_final, T_final, g_search_range);
@@ -39,8 +36,16 @@ function values = objective(x, Target_Start, Target_End, g_search_range)
         return;
     end
 
-    [F_s1, ~] = requiredForce(mech, ECB, w_ini, g_ini, g_ini, 'up'); % 忽略摩擦估算k
-    [F_s2, info] = requiredForce(mech, ECB, w_final, g_final, g_ini, 'up');
+    [F_s1, info1] = requiredForce(mech, ECB, w_ini, g_ini, g_ini, 'up'); % 忽略摩擦估算k
+    [F_s2, info2] = requiredForce(mech, ECB, w_final, g_final, g_ini, 'up');
+    % 如果最高轉速決定的彈簧力 (F_s2)，推不開零轉速時的靜態磁力 (F_static)
+    if F_s2 <= info1.F_mag
+        % 計算缺口 (差了多少力才推得開)
+        force_deficit = info1.F_mag - F_s2; 
+        pen_force = 8e6 + (force_deficit^2) * 1000; % 缺口越大，懲罰越重，告知演算法要往「增加滾子推力」的方向演化
+        values = [pen_force, pen_force, pen_force];
+        return;
+    end
     % 計算彈簧剛度 k (N/mm)，並檢查其合理性
     k_spring = (F_s2 - F_s1) / (g_ini - g_final);
     lb = k_spring - 53 * 10^3; ub = 157 * 10^3 - k_spring;
@@ -66,7 +71,7 @@ function values = objective(x, Target_Start, Target_End, g_search_range)
     % 生成 "下降段" 軌跡並計算扭矩 (用於算面積)
     R_hy = (w_final - w_C) / (w_final - w_ini);
     % 若 R_hy 不合理 (<0)，給予懲罰
-    if R_hy < 0 || info.Fw <= 0 || (ECB.r_yo - ECB.r_yi) < 0.020
+    if R_hy < 0 || info2.Fw <= 0 || (ECB.r_yo - ECB.r_yi) < 0.020
         values = [2e6, 2e6, 2e6]; 
         % warning('Invalid R_hy: %.4f. Penalty applied.', R_hy); 
         return;
@@ -80,12 +85,7 @@ function values = objective(x, Target_Start, Target_End, g_search_range)
         eq_down = @(g) requiredForce(mech, ECB, w, g, g_final, 'down') - F_spring(g);
         
         % 求解 上升段 g_up
-        try
-            % 限制搜尋範圍在 [g_final, g_ini]
-            g_up_vec(i) = fzero(eq_up, [g_final, g_ini]);
-        catch
-            g_up_vec(i) = g_final; % 若無解則代表被卡死在最底
-        end
+        g_up_vec(i) = gap_search_force(eq_up, g_final, g_ini);
 
         % 求解 下降段 g_down
         if w >= w_C
@@ -94,13 +94,8 @@ function values = objective(x, Target_Start, Target_End, g_search_range)
             if w_C == w_ini
                 g_down_vec(i) = g_ini;
             else
-                try
-                    % 為了加速，建議加上 optimset('Display','off')
-                    opts = optimset('Display','off');
-                    g_down_vec(i) = fzero(eq_down, [g_final, g_ini], opts);
-                catch
-                    g_down_vec(i) = g_ini; % 若 fzero 失敗，設定一個安全預設值
-                end
+                % 呼叫物理求解器
+                g_down_vec(i) = gap_search_force(eq_down, g_final, g_ini);
             end
         end
         

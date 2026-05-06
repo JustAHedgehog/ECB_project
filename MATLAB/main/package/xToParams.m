@@ -40,13 +40,13 @@ function [ECB, mech] = xToParams(x)
     mech.r_r   = x(9);
     mech.m_r   = x(10);
     mech.N     = x(11);
-    mech.k_m   = x(12);
+    mech.k_r   = x(12);
     mech.alpha = x(13);
     mech.beta  = x(14);
     mech.mu_w  = 0.1;
     mech.mu_t  = 0.1;
-    r_w_min = 3 * ECB.r_yi;
+    r_w_min = 0.027 + 0.005;
     r_w_max = ECB.r_yo - 0.005 - 2 * mech.r_r * cot(deg2rad(mech.alpha));
     % 計算 r_omega 基準位置
-    mech.r_omega_ini = r_w_min + mech.k_m * (r_w_max - r_w_min);
+    mech.r_omega_ini = r_w_min + mech.k_r * (r_w_max - r_w_min);
 end
