@@ -49,4 +49,7 @@ function [ECB, mech] = xToParams(x)
     r_w_max = ECB.r_yo - 0.005 - 2 * mech.r_r * cot(deg2rad(mech.alpha));
     % 計算 r_omega 基準位置
     mech.r_omega_ini = r_w_min + mech.k_r * (r_w_max - r_w_min);
+    % 彈簧常數(N/mm)
+    mech.k1 = x(15);
+    mech.k2 = x(16);
 end

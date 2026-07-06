@@ -46,18 +46,7 @@ function values = objective(x, Target_Start, Target_End, g_search_range)
         values = [pen_force, pen_force, pen_force];
         return;
     end
-    % 計算彈簧剛度 k (N/mm)，並檢查其合理性
-    k_spring = (F_s2 - F_s1) / (g_ini - g_final);
-    lb = k_spring - 53 * 10^3; ub = 157 * 10^3 - k_spring;
-    if lb * ub < 0
-        if lb < 0
-            values = [3e6 + lb^2, 3e6 + lb^2, 3e6 + lb^2];
-        else
-            values = [3e6 + ub^2, 3e6 + ub^2, 3e6 + ub^2];
-        end
-        % warning('Unrealistic spring stiffness: %.2f N/m. Penalty applied.', k_spring);
-        return;
-    end
+    
     % 定義任意氣隙 g 下的彈簧力函數
     F_spring = @(g) F_s1 + k_spring * (g_ini - g);
     % 算出 g_vec 與 T-N curve (使用 fzero)
