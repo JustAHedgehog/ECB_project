@@ -57,18 +57,18 @@ function [T_total, info] = ECB_BrakingTorque(params, rpm, g_curr)
             
             %% Step 4: 計算中間複數因子 r_bar (Eq. 49 下方定義，r_factor 表示文獻中的 "r bar")
             % 定義雙曲函數項以簡化程式碼
-            sh_ac = sinh(alpha_k * g);
-            ch_ac = cosh(alpha_k * g);
-            sh_gd = sinh(gamma_k * t_c);
-            ch_gd = cosh(gamma_k * t_c);
+            sh_ag = sinh(alpha_k * g);
+            ch_ag = cosh(alpha_k * g);
+            sh_gt = sinh(gamma_k * t_c);
+            ch_gt = cosh(gamma_k * t_c);
             
-            sh_abc = sinh(alpha_k * (t_m + g)); % sinh(alpha_k * (b+c))
-            ch_abc = cosh(alpha_k * (t_m + g)); % cosh(alpha_k * (b+c))
+            sh_atg = sinh(alpha_k * (t_m + g)); % sinh(alpha_k * (t_m + g))
+            ch_atg = cosh(alpha_k * (t_m + g)); % cosh(alpha_k * (t_m + g))
             
             ratio_g_a = gamma_k / alpha_k;
             
-            num_r = sh_ac * ch_gd + ratio_g_a * ch_ac * sh_gd;
-            den_r = sh_abc * ch_gd + ratio_g_a * ch_abc * sh_gd;
+            num_r = sh_ag * ch_gt + ratio_g_a * ch_ag * sh_gt;
+            den_r = sh_atg * ch_gt + ratio_g_a * ch_atg * sh_gt;
             
             r_factor = num_r / den_r;
             
