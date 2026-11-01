@@ -4,7 +4,7 @@ from matplotlib.widgets import Button
 import numpy as np
 import mplcursors
 
-def show_interactive_plot(data_dict, parsed_results, run_ids, sequence_steps, colors, tolerance):
+def show_interactive_plot(data_dict, parsed_results, run_ids, sequence_steps, colors):
     fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(11, 8), sharex=True, num="Detailed Analysis")
     plt.subplots_adjust(bottom=0.15, left=0.1, right=0.95)
 
@@ -29,13 +29,17 @@ def show_interactive_plot(data_dict, parsed_results, run_ids, sequence_steps, co
             df = data_dict[rid]
             
             chunk = df.loc[max(0, a_idx - 50) : min(len(df)-1, e_idx + 100)]
-            rel_time = (chunk.index - a_idx) * 40
+            # 【修改】：使用真實的 df['Time'] 陣列來計算相對時間
+            rel_time = df['Time'].loc[chunk.index].values - df['Time'].iloc[a_idx]
             
             df_speed_aligned[f'Run_{rid}'] = pd.Series(chunk['Speed'].values, index=rel_time)
             df_torque_aligned[f'Run_{rid}'] = pd.Series(chunk['Torque'].values, index=rel_time)
             df_pos_aligned[f'Run_{rid}'] = pd.Series(chunk['Position'].values, index=rel_time)
             c_trans, c_steady = (s_idx - a_idx), (e_idx - s_idx)
-            t_trans, t_steady = c_trans * 40, c_steady * 40
+            
+            # 利用真實的時間陣列來計算轉換與停留的實際毫秒數
+            t_trans = df['Time'].iloc[s_idx] - df['Time'].iloc[a_idx]
+            t_steady = df['Time'].iloc[e_idx] - df['Time'].iloc[s_idx]
             steady_data = df.loc[s_idx : e_idx]
             
             trans_times_ms.append(t_trans)
@@ -68,24 +72,31 @@ def show_interactive_plot(data_dict, parsed_results, run_ids, sequence_steps, co
             ax.axvline(avg_end_time, color='red', linestyle='-', linewidth=2, alpha=0.6, label='Steady End (Avg)' if ax == ax1 else "")
             ax.grid(True)
 
-        # 繪製目標轉速與 +-0.5 上下限
         ax1.axhline(inspect_target, color='gray', linestyle='-.', label=f'Target ({inspect_target})')
-        ax1.axhline(inspect_target + tolerance, color='red', linestyle=':', alpha=0.5)
-        ax1.axhline(inspect_target - tolerance, color='red', linestyle=':', alpha=0.5)
         ax1.set_ylabel('Speed (RPM)'); ax1.set_title(f"Continuous sequence: {step['name']} ({idx+1}/{len(sequence_steps)})")
         ax1.legend(loc='upper right', bbox_to_anchor=(1.0, 1.0), fontsize='small')
         ax2.set_ylabel('Torque (Nm)')
-        ax3.set_ylabel('Position'); ax3.set_xlabel('Relative Time from Transition Start (ms)')
+        ax3.set_ylabel('Position(mm)'); ax3.set_xlabel('Relative Time from Transition Start (ms)')
         ax1.set_xlim(-500, df_speed_aligned.index.max()) 
 
         print(f"\n\n{'='*75}")
         print(f"📊 {step['name']} 數據統計")
-        print(f"{'='*75}")
-        print(f"{'實驗組數':<2} | {'轉換時間(ms)':<10} | {'轉換擷取資料數':<6} | {'停留時間(ms)':<10} | {'停留擷取資料數':<6} | {'轉速平均(rpm)':<11} | {'扭矩平均(Nm)':<11} | {'扭矩標準差'}")
-        print("-" * 80)
+        # 計算總視覺寬度為 107 字元
+        print("=" * 107)
+        # 直接寫死中文標題，避免 f-string 對中文字元長度計算的誤差
+        print("實驗組數 | 轉換時間(ms) | 停留時間(ms) | 轉速平均(rpm) | 扭矩平均(Nm) | 扭矩標準差 | 平均位移(mm) | 位移標準差")
+        print("-" * 107)
+        
         for row in table_data:
-            print(f"Run {row['rid']:<4} | {row['trans']:<14} | {row['trans_count']:<14} | {row['steady']:<14} | {row['steady_count']:<14} | {row['mean_spd']:<17.2f} | {row['mean_tq']:<16.2f} | {row['std_tq']:.3f}")
-        print(f"{'='*75}")
+            # 提前算出位移的統計值，讓程式碼更乾淨
+            pos_mean = df_pos_aligned[f'Run_{row["rid"]}'].mean()
+            pos_std = df_pos_aligned[f'Run_{row["rid"]}'].std()
+            
+            # 依照上方中英文混合標題的「真實視覺長度」來賦予精確的佔位寬度
+            # 中文字算 2 寬度，英文字算 1 寬度
+            print(f"Run {row['rid']:<4} | {row['trans']:<12.1f} | {row['steady']:<12.1f} | {row['mean_spd']:<13.2f} | {row['mean_tq']:<12.2f} | {row['std_tq']:<10.3f} | {pos_mean:<12.2f} | {pos_std:<10.2f}")
+            
+        print("=" * 107)
         
         fig.canvas.draw_idle()
 
